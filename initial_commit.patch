@@ -1,0 +1,3185 @@
+Index: gradle/wrapper/gradle-wrapper.properties
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>windows-1250
+===================================================================
+--- gradle/wrapper/gradle-wrapper.properties	(revision )
++++ gradle/wrapper/gradle-wrapper.properties	(revision )
+@@ -0,0 +1,6 @@
++#Wed May 17 16:10:32 CEST 2017
++distributionBase=GRADLE_USER_HOME
++distributionPath=wrapper/dists
++zipStoreBase=GRADLE_USER_HOME
++zipStorePath=wrapper/dists
++distributionUrl=https\://services.gradle.org/distributions/gradle-3.3-all.zip
+Index: app/src/main/java/com/example/ola/journeyapp/MainActivity1.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/MainActivity1.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/MainActivity1.java	(revision )
+@@ -0,0 +1,499 @@
++package com.example.ola.journeyapp;
++
++
++import android.*;
++import android.app.Activity;
++import android.app.Notification;
++import android.app.NotificationManager;
++import android.app.PendingIntent;
++import android.app.TaskStackBuilder;
++import android.content.Context;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.database.Cursor;
++import android.database.sqlite.SQLiteDatabase;
++import android.database.sqlite.SQLiteException;
++import android.database.sqlite.SQLiteOpenHelper;
++import android.graphics.Bitmap;
++import android.graphics.Canvas;
++import android.graphics.drawable.Drawable;
++import android.location.Address;
++import android.location.Geocoder;
++import android.location.Location;
++import com.google.android.gms.location.LocationListener;
++import android.os.Bundle;
++import android.support.annotation.NonNull;
++import android.support.annotation.Nullable;
++import android.support.v4.app.ActivityCompat;
++import android.support.v4.app.FragmentActivity;
++import android.support.v4.app.NotificationCompat;
++import android.util.Log;
++import android.view.View;
++import android.widget.Toast;
++
++import com.google.android.gms.common.ConnectionResult;
++import com.google.android.gms.common.GooglePlayServicesUtil;
++import com.google.android.gms.common.api.GoogleApiClient;
++
++import com.google.android.gms.location.LocationRequest;
++import com.google.android.gms.location.LocationServices;
++import com.google.android.gms.maps.CameraUpdateFactory;
++import com.google.android.gms.maps.GoogleMap;
++import com.google.android.gms.maps.OnMapReadyCallback;
++import com.google.android.gms.maps.SupportMapFragment;
++import com.google.android.gms.maps.model.BitmapDescriptor;
++import com.google.android.gms.maps.model.BitmapDescriptorFactory;
++import com.google.android.gms.maps.model.LatLng;
++import com.google.android.gms.maps.model.Marker;
++import com.google.android.gms.maps.model.MarkerOptions;
++
++import java.io.IOException;
++import java.util.HashMap;
++import java.util.List;
++
++
++public class MainActivity1 extends FragmentActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks,
++        GoogleApiClient.OnConnectionFailedListener, LocationListener {
++
++
++
++    private GoogleMap mMap;
++    private static final int PLAY_SERVICES_RESOLUTION_REQUEST = 1000;
++    private Location myLastLocation;
++    private GoogleApiClient mGoogleApiClient;
++    private boolean mRequestLocationUpdates = false;
++    private LocationRequest mLocationRequest;
++
++    private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 10; // 100 meters
++    private static final long MIN_TIME_BW_UPDATES = 1000 * 10; // 15 seconds
++
++    private double myLati;
++    private double myLongi;
++
++    private String[] to_visit_list;
++    private Marker myMarker;
++    private SQLiteDatabase db;
++    private HashMap<Marker, MarkerInfo> eventMarkerMap;
++    private String place_name;
++    private  BitmapDescriptor markerIcon;
++
++
++    protected void onCreate(Bundle savedInstanceState) {
++
++        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
++            ActivityCompat.requestPermissions(MainActivity1.this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 0);
++        }
++
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.activity_main);
++        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
++                .findFragmentById(R.id.map);
++        mapFragment.getMapAsync(this);
++
++        if(checkPlayServices()){
++            buildGoogleApiClient();
++            createLocationRequest();
++        }
++
++        Drawable circleDrawable = getResources().getDrawable(R.drawable.dot);
++        markerIcon = getMarkerIconFromDrawable(circleDrawable);
++
++        eventMarkerMap = new HashMap<Marker, MarkerInfo>();
++
++    }
++
++    protected void onStart() {
++        if(mGoogleApiClient != null){
++            mGoogleApiClient.connect();
++        }
++        super.onStart();
++    }
++
++    public void onRestart() {
++        super.onRestart();
++        setToVisit();
++        setVisited();
++    }
++
++    protected void onResume(){
++        super.onResume();
++        checkPlayServices();
++        mGoogleApiClient.connect();
++
++        if(mGoogleApiClient.isConnected() && mRequestLocationUpdates){
++            startLocationUpdates();
++        }
++
++        if (mMap == null) {
++            SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
++            mapFragment.getMapAsync(this);
++        }
++        if (mMap != null) {
++
++            mMap.clear();
++
++
++            MarkerOptions a = new MarkerOptions()
++                    .position(new LatLng(myLati, myLongi))
++                    .title("Ty")
++                    .icon(markerIcon);
++
++            myMarker = mMap.addMarker(a);
++
++            mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(myLati, myLongi)));
++            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(myLati, myLongi), 18));
++
++
++            setToVisit();
++            setVisited();
++        }
++    }
++
++    protected void onStop(){
++        super.onStop();
++
++        if(mGoogleApiClient.isConnected()){
++            mGoogleApiClient.disconnect();
++        }
++    }
++
++    protected void onPause(){
++        super.onPause();
++        stopLocationUpdates();
++    }
++
++    private void handleLocation(){
++
++        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
++            ActivityCompat.requestPermissions(MainActivity1.this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 0);
++        }
++
++        myLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
++
++        if(myLastLocation != null){
++            myLati = myLastLocation.getLatitude();
++            myLongi = myLastLocation.getLongitude();
++
++            Log.e("!!!!!!", String.valueOf(myLati) + " " + String.valueOf(myLongi));
++
++            LatLng position = new LatLng(myLati, myLongi);
++
++            if(myMarker == null){
++                MarkerOptions a = new MarkerOptions()
++                    .position(new LatLng(myLati, myLongi))
++                    .title("Ty")
++                    .icon(markerIcon);
++
++                myMarker = mMap.addMarker(a);
++
++            }else{
++                myMarker.setPosition(position);
++            }
++
++
++            mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(myLati, myLongi)));
++            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(myLati, myLongi), 18));
++
++        }else{
++            //włącz lokalizacje
++        }
++    }
++
++    private BitmapDescriptor getMarkerIconFromDrawable(Drawable drawable) {
++        Canvas canvas = new Canvas();
++        Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
++        canvas.setBitmap(bitmap);
++        drawable.setBounds(0, 0, drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
++        drawable.draw(canvas);
++        return BitmapDescriptorFactory.fromBitmap(bitmap);
++    }
++
++    private void togglePeriodLocationUpdates(){
++        if(!mRequestLocationUpdates){
++            mRequestLocationUpdates = true;
++            startLocationUpdates();
++        }else{
++            mRequestLocationUpdates = false;
++            stopLocationUpdates();
++        }
++    }
++
++    protected synchronized void buildGoogleApiClient(){
++        mGoogleApiClient = new GoogleApiClient.Builder(this)
++                .addConnectionCallbacks(this)
++                .addOnConnectionFailedListener(this)
++                .addApi(LocationServices.API).build();
++    }
++
++    protected void createLocationRequest(){
++        mLocationRequest = new LocationRequest();
++        mLocationRequest.setInterval(MIN_TIME_BW_UPDATES);
++        mLocationRequest.setFastestInterval(1 * 1000);
++        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
++        mLocationRequest.setSmallestDisplacement(MIN_DISTANCE_CHANGE_FOR_UPDATES);
++    }
++
++    private boolean checkPlayServices(){
++        int resultCode = GooglePlayServicesUtil.isGooglePlayServicesAvailable(this);
++        if(resultCode != ConnectionResult.SUCCESS){
++            if(GooglePlayServicesUtil.isUserRecoverableError(resultCode)){
++                GooglePlayServicesUtil.getErrorDialog(resultCode, this, PLAY_SERVICES_RESOLUTION_REQUEST).show();
++            }else{
++                Toast.makeText(this, "This device is not supported", Toast.LENGTH_LONG).show();
++                finish();
++            }
++            return false;
++        }
++        return true;
++    }
++
++    protected void startLocationUpdates(){
++
++        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
++
++            ActivityCompat.requestPermissions(MainActivity1.this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 0);
++        }
++
++        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
++    }
++
++    protected void stopLocationUpdates(){
++        LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, (com.google.android.gms.location.LocationListener) this);
++    }
++
++
++    @Override
++    public void onMapReady(GoogleMap googleMap) {
++        mMap = googleMap;
++
++        mMap.setOnInfoWindowClickListener(new GoogleMap.OnInfoWindowClickListener() {
++            @Override
++            public void onInfoWindowClick(Marker marker) {
++
++                MarkerInfo eventInfo = eventMarkerMap.get(marker);
++
++                if(eventInfo != null){
++                    Intent i = new Intent(MainActivity1.this, visitedDetail.class);
++                    i.putExtra("ID", (int)eventInfo.getId());
++
++                    Log.e("!!!!!!!!!!!!", String.valueOf(eventInfo.getId()));
++                    startActivity(i);
++
++                }
++            }});
++
++
++        setToVisit();
++        setVisited();
++
++    }
++
++    @Override
++    public void onLocationChanged(Location location) {
++        myLastLocation = location;
++        handleLocation();
++        calculateDistance();
++    }
++
++    @Override
++    public void onConnected(@Nullable Bundle bundle) {
++
++        handleLocation();
++        if(mRequestLocationUpdates){
++            startLocationUpdates();
++        }
++        mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(myLati, myLongi)));
++        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(myLati, myLongi), 18));
++        togglePeriodLocationUpdates();
++
++    }
++
++    @Override
++    public void onConnectionSuspended(int i) {
++        mGoogleApiClient.connect();
++
++    }
++
++    @Override
++    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
++
++    }
++
++    public void calculateDistance() {
++
++        Location myLocation = new Location("");
++        myLocation.setLatitude(myLati);
++        myLocation.setLongitude(myLongi);
++
++        for(int i = 0; i < to_visit_list.length; i++) {
++            String[] row = to_visit_list[i].split(";");
++            String name = row[0];
++            double lati = Double.valueOf(row[1]);
++            double longi = Double.valueOf(row[2]);
++
++            Location loc = new Location("");
++            loc.setLatitude(lati);
++            loc.setLongitude(longi);
++
++            float disnatnceInMeters = myLocation.distanceTo(loc);
++
++            if(disnatnceInMeters < 200){
++                sendNotification(name, disnatnceInMeters);
++            }
++        }
++    }
++
++    private void sendNotification(String Name, float distance){
++
++        NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(this);
++        mBuilder.setAutoCancel(true);
++        mBuilder.setSmallIcon(R.drawable.aparat);
++        mBuilder.setContentTitle("You are close to:");
++        mBuilder.setContentText(Name +": "+ distance);
++
++        Intent resultIntent = new Intent(this, MainActivity1.class);
++        TaskStackBuilder stackBuilder = TaskStackBuilder.create(this);
++        stackBuilder.addParentStack(MainActivity1.class);
++
++        stackBuilder.addNextIntent(resultIntent);
++        PendingIntent resultPendingIntent = stackBuilder.getPendingIntent(0,PendingIntent.FLAG_UPDATE_CURRENT);
++        mBuilder.setContentIntent(resultPendingIntent);
++
++        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
++
++        mBuilder.build().flags |= Notification.FLAG_AUTO_CANCEL;
++
++        mNotificationManager.notify(12345, mBuilder.build());
++
++    }
++
++    public void getArrayFromDataBase() {
++        try {
++
++            SQLiteOpenHelper databaseHelper = new DatabaseHelper(this);
++            db = databaseHelper.getReadableDatabase();
++            Cursor cursor = db.query("toVisit", new String[]{"_id", "Name", "Latitude", "Longitude"}, null, null, null, null, null);
++            to_visit_list = new String[cursor.getCount()];
++
++            double longi;
++            double lati;
++            String name;
++
++            int i = 0;
++            while (cursor.moveToNext()) {
++                longi = cursor.getDouble(3);
++                lati = cursor.getDouble(2);
++                name = cursor.getString(1);
++                to_visit_list[i] = name + ';' + Double.toString(lati) + ';' + Double.toString(longi);
++                i++;
++            }
++            cursor.close();
++
++        } catch (SQLiteException e) {
++            Toast toast = Toast.makeText(this, "Baza danych jest niedostępna.", Toast.LENGTH_SHORT);
++            toast.show();
++        }
++
++        db.close();
++
++    }
++
++    public void take_my_location(View v){
++        handleLocation();
++        mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(myLati, myLongi)));
++        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(myLati, myLongi), 18));
++    }
++
++    public void setVisited() {
++
++        try {
++
++            SQLiteOpenHelper databaseHelper = new DatabaseHelper(this);
++            db = databaseHelper.getReadableDatabase();
++            Cursor cursor = db.query("visited", new String[]{"_id", "Name", "Latitude", "Longitude"}, null, null, null, null, null);
++
++            double longi;
++            double lati;
++            String name;
++
++            while (cursor.moveToNext()) {
++                longi = cursor.getDouble(3);
++                lati = cursor.getDouble(2);
++                name = cursor.getString(1);
++                LatLng pos = new LatLng(lati, longi);
++
++                Marker a = mMap.addMarker(new MarkerOptions()
++                        .position(pos)
++                        .title("Visited: " + name)
++                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
++
++
++                int id = cursor.getInt(0);
++                Log.e("!!!!!!!!!!!!", String.valueOf(id));
++                eventMarkerMap.put(a, new MarkerInfo(id));
++            }
++
++            cursor.close();
++
++        } catch (SQLiteException e) {
++            Toast toast = Toast.makeText(this, "Baza danych jest niedostępna.", Toast.LENGTH_SHORT);
++            toast.show();
++        }
++
++        db.close();
++
++    }
++
++    public void setToVisit() {
++
++        getArrayFromDataBase();
++
++        for (int i = 0; i < to_visit_list.length; i++) {
++            String[] row = to_visit_list[i].split(";");
++            String name = row[0];
++            double lati = Double.valueOf(row[1]);
++            double longi = Double.valueOf(row[2]);
++
++            LatLng pos = new LatLng(lati, longi);
++            mMap.addMarker(new MarkerOptions()
++                    .position(pos)
++                    .title("To visit: " + name)
++                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
++                    .alpha(0.7f));
++        }
++    }
++
++    public void goToVisit(View view) {
++        Intent intent = new Intent(this, toVisitList.class);
++        startActivity(intent);
++
++    }
++
++    public void goToVisitedList(View v) {
++        Intent i = new Intent(this, visitedLIst.class);
++        startActivity(i);
++    }
++
++    public void goToCamera(View v) {
++        Intent intent = new Intent(this, addVisited.class);
++
++        Geocoder geocoder = new Geocoder(this);
++        place_name = "Unknown localization";
++
++
++        try {
++            List<Address> addresses = geocoder.getFromLocation(myLati, myLongi, 1);
++            if (addresses.size() > 0) {
++                place_name = addresses.get(0).getLocality() + ", " + addresses.get(0).getThoroughfare();
++            }
++
++        } catch (IOException e) {
++
++        }
++
++        intent.putExtra("name", place_name);
++        intent.putExtra("lati", myLati);
++        intent.putExtra("longi", myLongi);
++        startActivity(intent);
++    }
++}
+Index: app/src/main/java/com/example/ola/journeyapp/visitedDetail.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/visitedDetail.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/visitedDetail.java	(revision )
+@@ -0,0 +1,100 @@
++package com.example.ola.journeyapp;
++
++import android.app.Activity;
++import android.content.Intent;
++import android.database.Cursor;
++import android.database.sqlite.SQLiteDatabase;
++import android.database.sqlite.SQLiteException;
++import android.database.sqlite.SQLiteOpenHelper;
++import android.graphics.Bitmap;
++import android.graphics.BitmapFactory;
++import android.icu.util.Calendar;
++import android.os.Bundle;
++import android.util.Log;
++import android.view.View;
++import android.widget.EditText;
++import android.widget.ImageView;
++import android.widget.TextView;
++import android.widget.Toast;
++
++import java.text.SimpleDateFormat;
++import java.util.Date;
++import java.util.Locale;
++
++/**
++ * Created by Ola on 2017-05-29.
++ */
++
++public class visitedDetail extends Activity {
++
++    private TextView place_name;
++    private TextView place_lati;
++    private TextView place_longi;
++    private TextView place_note;
++    private ImageView place_photo;
++    private TextView place_date;
++    private Bitmap photo_to_show;
++
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.visited_detail);
++
++        int id = (Integer)getIntent().getExtras().get("ID");
++
++        place_name = (TextView)findViewById(R.id.detail_name);
++        place_lati = (TextView)findViewById(R.id.detail_lati);
++        place_longi = (TextView)findViewById(R.id.detail_longi);
++        place_note = (TextView)findViewById(R.id.detail_note);
++        place_photo = (ImageView)findViewById(R.id.detail_photo);
++        place_date = (TextView)findViewById(R.id.detail_date);
++
++        try{
++            SQLiteOpenHelper databaseHelper = new DatabaseHelper(this);
++            SQLiteDatabase db = databaseHelper.getReadableDatabase();
++            Cursor cursor = db.query("visited", new String[]{"Name", "Latitude", "Longitude", "Note", "Photo", "Date"}, "_id = ?", new String[]{Integer.toString(id)}, null, null, null);
++            if(cursor.moveToFirst()){
++
++
++                String name = cursor.getString(0);
++                double lati = cursor.getDouble(1);
++                double longi = cursor.getDouble(2);
++                String note = cursor.getString(3);
++                byte[] photo_from_base = cursor.getBlob(4);
++
++                place_name.setText(name);
++                place_lati.setText(Double.toString(lati));
++                place_longi.setText(Double.toString(longi));
++                place_date.setText(cursor.getString(5));
++
++                if(!note.equals("")){
++                    place_note.setText(note);
++                }else{
++                    place_note.setText("You didn't add note :(");
++                }
++
++
++                if(photo_from_base != null){
++                    photo_to_show = BitmapFactory.decodeByteArray(photo_from_base, 0, photo_from_base.length);
++                    place_photo.setImageBitmap(photo_to_show);
++                }
++
++            }
++            cursor.close();
++            db.close();
++
++        }catch(SQLiteException e){
++            Toast toast = Toast.makeText(this, "Baza danych jest niedostępna.", Toast.LENGTH_SHORT);
++            toast.show();
++        }
++    }
++
++    public void showPhotoDetail(View v){
++        Intent i = new Intent(this, PhotoDetails.class);
++        i.putExtra("photo", photo_to_show);
++        startActivity(i);
++    }
++
++
++
++
++}
+Index: app/src/main/res/layout/add_visited.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/layout/add_visited.xml	(revision )
++++ app/src/main/res/layout/add_visited.xml	(revision )
+@@ -0,0 +1,67 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:layout_margin="10dp"
++    android:orientation="vertical"
++    android:weightSum="1">
++
++    <ImageButton
++        android:id="@+id/take_photo"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:onClick="takePhoto"
++        android:src="@android:drawable/ic_menu_camera" />
++
++    <TextView
++        android:id="@+id/textView"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="Place Name"
++        android:textSize="24sp" />
++
++    <EditText
++        android:id="@+id/place_name"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginBottom="5dp"
++        android:ems="10"
++        android:hint="Place Name"
++        android:inputType="textPersonName"
++        android:textSize="20sp" />
++
++    <TextView
++        android:id="@+id/textView2"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="Note"
++        android:textSize="24sp" />
++
++    <EditText
++        android:id="@+id/note"
++        android:layout_width="match_parent"
++        android:layout_height="125dp"
++        android:gravity="top|left"
++        android:hint="Note"
++        android:inputType="textMultiLine"
++        android:lines="10"
++        android:maxLines="15"
++        android:scrollbars="vertical"
++        android:textSize="20sp" />
++
++    <Button
++        android:id="@+id/add_visited"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="Save"
++        android:onClick="add_visited"/>
++
++    <ImageView
++        android:id="@+id/photo"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:onClick="showPhoto"
++        android:src="@color/common_google_signin_btn_text_dark_default" />
++
++</LinearLayout>
+\ No newline at end of file
+Index: app/src/main/res/layout/add_to_visit.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/layout/add_to_visit.xml	(revision )
++++ app/src/main/res/layout/add_to_visit.xml	(revision )
+@@ -0,0 +1,97 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:padding="10dp">
++
++    <TextView
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="Name"
++        android:textSize="24sp" />
++
++    <EditText
++        android:id="@+id/add_name"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:ems="10"
++        android:inputType="textPersonName" />
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="15dp"
++        android:orientation="horizontal">
++
++        <TextView
++            android:id="@+id/textView3"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="Latitude"
++            android:textSize="24sp" />
++
++        <TextView
++            android:id="@+id/textView4"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="Longitude"
++            android:textSize="24sp" />
++    </LinearLayout>
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal">
++
++        <EditText
++            android:id="@+id/add_lati"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:ems="10"
++            android:inputType="numberDecimal" />
++
++        <EditText
++            android:id="@+id/add_longi"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:ems="10"
++            android:inputType="numberDecimal" />
++
++    </LinearLayout>
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:layout_marginTop="15dp"
++        android:layout_weight="1"
++        android:orientation="horizontal">
++
++        <Button
++            android:id="@+id/cancel"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="Cancel" />
++
++        <Button
++            android:id="@+id/reset"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="Reset" />
++
++        <Button
++            android:id="@+id/save"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="Save" />
++
++    </LinearLayout>
++
++</LinearLayout>
+\ No newline at end of file
+Index: app/src/test/java/com/example/ola/journeyapp/ExampleUnitTest.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/test/java/com/example/ola/journeyapp/ExampleUnitTest.java	(revision )
++++ app/src/test/java/com/example/ola/journeyapp/ExampleUnitTest.java	(revision )
+@@ -0,0 +1,17 @@
++package com.example.ola.journeyapp;
++
++import org.junit.Test;
++
++import static org.junit.Assert.*;
++
++/**
++ * Example local unit test, which will execute on the development machine (host).
++ *
++ * @see <a href="http://d.android.com/tools/testing">Testing documentation</a>
++ */
++public class ExampleUnitTest {
++    @Test
++    public void addition_isCorrect() throws Exception {
++        assertEquals(4, 2 + 2);
++    }
++}
+\ No newline at end of file
+Index: app/src/main/java/com/example/ola/journeyapp/visitedLIst.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/visitedLIst.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/visitedLIst.java	(revision )
+@@ -0,0 +1,121 @@
++package com.example.ola.journeyapp;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.database.Cursor;
++import android.database.sqlite.SQLiteDatabase;
++import android.database.sqlite.SQLiteException;
++import android.database.sqlite.SQLiteOpenHelper;
++import android.os.Bundle;
++import android.util.Log;
++import android.view.View;
++import android.widget.AdapterView;
++import android.widget.CursorAdapter;
++import android.widget.ListView;
++import android.widget.Toast;
++
++public class visitedLIst extends Activity {
++    private SQLiteDatabase db;
++    private Cursor cursor;
++    private visitedCursorAdapter visitedCursorAdapter;
++
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.visited_list);
++
++        ListView tovisit = (ListView) findViewById(R.id.visited_list);
++
++
++        try {
++            SQLiteOpenHelper databaseHelper = new DatabaseHelper(this);
++            db = databaseHelper.getReadableDatabase();
++            cursor = db.query("visited", new String[]{"_id", "Name", "Latitude", "Longitude", "Note", "Photo"}, null, null, null, null, null);
++
++            if(cursor.getCount() == 0){
++                Toast.makeText(visitedLIst.this, "List is empty :(", Toast.LENGTH_LONG).show();
++            }
++
++            visitedCursorAdapter = new visitedCursorAdapter(this, cursor, 0);
++
++            tovisit.setAdapter(visitedCursorAdapter);
++
++        } catch (SQLiteException e) {
++            Toast toast = Toast.makeText(this, "Baza danych jest niedostępna.", Toast.LENGTH_SHORT);
++            toast.show();
++        }
++
++
++        tovisit.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener(){
++            public boolean onItemLongClick(final AdapterView<?> p, View v, final int po, long id) {
++                AlertDialog.Builder builder = new AlertDialog.Builder(visitedLIst.this);
++                builder.setTitle("Delete");
++                builder.setMessage("Are you sure you want to delete?");
++                builder.setIcon(android.R.drawable.ic_dialog_alert);
++                builder.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
++                    public void onClick(DialogInterface dialog, int ii) {
++                        SQLiteOpenHelper databaseHelper = new DatabaseHelper(visitedLIst.this);
++                        db = databaseHelper.getWritableDatabase();
++                        Cursor cursor = (Cursor) p.getItemAtPosition(po);
++
++                        long ID = cursor.getLong(cursor.getColumnIndexOrThrow("_id"));
++                        db.delete("visited", "_id"+ "=" + ID, null);
++                        Cursor cursor2 = db.query("visited", new String[]{"_id", "Name", "Latitude", "Longitude", "Note", "Photo"}, null, null, null, null, null);
++                        visitedCursorAdapter.changeCursor(cursor2);
++
++                    }
++                });
++
++                builder.setNegativeButton("No", new DialogInterface.OnClickListener()
++                        {
++                            public void onClick(DialogInterface dialog, int ii) {
++                                dialog.dismiss();
++                            }
++                        }
++                );
++                builder.show();
++                return true;
++            }
++        });
++
++
++        tovisit.setOnItemClickListener(new AdapterView.OnItemClickListener(){
++            public void onItemClick(final AdapterView<?> adapter, View v, final int position,
++                                    long id){
++                Intent i = new Intent(visitedLIst.this, visitedDetail.class);
++                i.putExtra("ID", (int)id);
++                startActivity(i);
++            }
++        });
++    }
++
++
++    public void onRestart(){
++        super.onRestart();
++
++        ListView tovisit = (ListView) findViewById(R.id.visited_list);
++
++        try {
++            SQLiteOpenHelper databaseHelper = new DatabaseHelper(this);
++            db = databaseHelper.getReadableDatabase();
++            cursor = db.query("visited", new String[]{"_id", "Name", "Latitude", "Longitude", "Note", "Photo"}, null, null, null, null, null);
++
++            visitedCursorAdapter = new visitedCursorAdapter(this, cursor, 0);
++
++            tovisit.setAdapter(visitedCursorAdapter);
++
++        } catch (SQLiteException e) {
++            Toast toast = Toast.makeText(this, "Baza danych jest niedostępna.", Toast.LENGTH_SHORT);
++            toast.show();
++        }
++
++    }
++
++    public void onDestroy(){
++        super.onDestroy();
++        db.close();
++        cursor.close();
++    }
++
++}
+\ No newline at end of file
+Index: build.gradle
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- build.gradle	(revision )
++++ build.gradle	(revision )
+@@ -0,0 +1,23 @@
++// Top-level build file where you can add configuration options common to all sub-projects/modules.
++
++buildscript {
++    repositories {
++        jcenter()
++    }
++    dependencies {
++        classpath 'com.android.tools.build:gradle:2.3.0'
++
++        // NOTE: Do not place your application dependencies here; they belong
++        // in the individual module build.gradle files
++    }
++}
++
++allprojects {
++    repositories {
++        jcenter()
++    }
++}
++
++task clean(type: Delete) {
++    delete rootProject.buildDir
++}
+Index: app/.gitignore
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/.gitignore	(revision )
++++ app/.gitignore	(revision )
+@@ -0,0 +1,1 @@
++/build
+Index: app/src/androidTest/java/com/example/ola/journeyapp/ExampleInstrumentedTest.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/androidTest/java/com/example/ola/journeyapp/ExampleInstrumentedTest.java	(revision )
++++ app/src/androidTest/java/com/example/ola/journeyapp/ExampleInstrumentedTest.java	(revision )
+@@ -0,0 +1,26 @@
++package com.example.ola.journeyapp;
++
++import android.content.Context;
++import android.support.test.InstrumentationRegistry;
++import android.support.test.runner.AndroidJUnit4;
++
++import org.junit.Test;
++import org.junit.runner.RunWith;
++
++import static org.junit.Assert.*;
++
++/**
++ * Instrumentation test, which will execute on an Android device.
++ *
++ * @see <a href="http://d.android.com/tools/testing">Testing documentation</a>
++ */
++@RunWith(AndroidJUnit4.class)
++public class ExampleInstrumentedTest {
++    @Test
++    public void useAppContext() throws Exception {
++        // Context of the app under test.
++        Context appContext = InstrumentationRegistry.getTargetContext();
++
++        assertEquals("com.example.ola.journeyapp", appContext.getPackageName());
++    }
++}
+Index: app/src/main/res/values/styles.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/values/styles.xml	(revision )
++++ app/src/main/res/values/styles.xml	(revision )
+@@ -0,0 +1,11 @@
++<resources>
++
++    <!-- Base application theme. -->
++    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
++        <!-- Customize your theme here. -->
++        <item name="colorPrimary">@color/colorPrimary</item>
++        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
++        <item name="colorAccent">@color/colorAccent</item>
++    </style>
++
++</resources>
+Index: app/src/release/res/values/google_maps_api.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/release/res/values/google_maps_api.xml	(revision )
++++ app/src/release/res/values/google_maps_api.xml	(revision )
+@@ -0,0 +1,22 @@
++<resources>
++    <!--
++    TODO: Before you release your application, you need a Google Maps API key.
++
++    To do this, you can either add your release key credentials to your existing
++    key, or create a new key.
++
++    Note that this file specifies the API key for the release build target.
++    If you have previously set up a key for the debug target with the debug signing certificate,
++    you will also need to set up a key for your release certificate.
++
++    Follow the directions here:
++
++    https://developers.google.com/maps/documentation/android/signup
++
++    Once you have your key (it starts with "AIza"), replace the "google_maps_key"
++    string in this file.
++    -->
++    <string name="google_maps_key" templateMergeStrategy="preserve" translatable="false">
++        YOUR_KEY_HERE
++    </string>
++</resources>
+Index: app/src/debug/res/values/google_maps_api.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/debug/res/values/google_maps_api.xml	(revision )
++++ app/src/debug/res/values/google_maps_api.xml	(revision )
+@@ -0,0 +1,24 @@
++<resources>
++    <!--
++    TODO: Before you run your application, you need a Google Maps API key.
++
++    To get one, follow this link, follow the directions and press "Create" at the end:
++
++    https://console.developers.google.com/flows/enableapi?apiid=maps_android_backend&keyType=CLIENT_SIDE_ANDROID&r=71:38:54:A5:16:B7:C5:AD:8C:8C:53:E9:0D:B9:69:2E:46:3E:07:1B%3Bcom.example.ola.journeyapp
++
++    You can also add your credentials to an existing key, using these values:
++
++    Package name:
++    71:38:54:A5:16:B7:C5:AD:8C:8C:53:E9:0D:B9:69:2E:46:3E:07:1B
++
++    SHA-1 certificate fingerprint:
++    71:38:54:A5:16:B7:C5:AD:8C:8C:53:E9:0D:B9:69:2E:46:3E:07:1B
++
++    Alternatively, follow the directions here:
++    https://developers.google.com/maps/documentation/android/start#get-key
++
++    Once you have your key (it starts with "AIza"), replace the "google_maps_key"
++    string in this file.
++    -->
++    <string name="google_maps_key" templateMergeStrategy="preserve" translatable="false"> AIzaSyATwhNEc9V8uve2Y6pmjhbX66sH0UK4rpI</string>
++</resources>
+Index: app/src/main/java/com/example/ola/journeyapp/toVisitList.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/toVisitList.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/toVisitList.java	(revision )
+@@ -0,0 +1,122 @@
++package com.example.ola.journeyapp;
++
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.app.ListActivity;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.database.Cursor;
++import android.database.sqlite.SQLiteDatabase;
++import android.database.sqlite.SQLiteException;
++import android.database.sqlite.SQLiteOpenHelper;
++import android.os.Bundle;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.AdapterView;
++import android.widget.CursorAdapter;
++import android.widget.ListView;
++import android.widget.SimpleCursorAdapter;
++import android.widget.Toast;
++
++public class toVisitList extends Activity {
++
++    private SQLiteDatabase db;
++    private Cursor cursor;
++    private myCursorAdapter myCursorAdapter;
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState){
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.to_visit_list);
++
++        ListView tovisit = (ListView)findViewById(R.id.tovisit);
++
++
++        try{
++            SQLiteOpenHelper databaseHelper = new DatabaseHelper(this);
++            db = databaseHelper.getReadableDatabase();
++            cursor = db.query("toVisit", new String[] {"_id", "Name","Latitude", "Longitude"}, null, null, null, null, null);
++
++            myCursorAdapter = new myCursorAdapter(this, cursor, 0);
++
++            tovisit.setAdapter(myCursorAdapter);
++
++        }catch(SQLiteException e){
++            Toast toast = Toast.makeText(this, "Baza danych jest niedostępna.", Toast.LENGTH_SHORT);
++            toast.show();
++        }
++
++
++        tovisit.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener(){
++            public boolean onItemLongClick(final AdapterView<?> p, View v, final int po, long id) {
++                AlertDialog.Builder builder = new AlertDialog.Builder(toVisitList.this);
++                builder.setTitle("Delete");
++                builder.setMessage("Are you sure you want to delete?");
++                builder.setIcon(android.R.drawable.ic_dialog_alert);
++                builder.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
++                    public void onClick(DialogInterface dialog, int ii) {
++                        SQLiteOpenHelper databaseHelper = new DatabaseHelper(toVisitList.this);
++                        db = databaseHelper.getWritableDatabase();
++                        Cursor cursor = (Cursor) p.getItemAtPosition(po);
++
++                        long ID = cursor.getLong(cursor.getColumnIndexOrThrow("_id"));
++                        db.delete("toVisit", "_id"+ "=" + ID, null);
++                        Cursor cursor2 = db.query("toVisit", new String[] {"_id", "Name","Latitude", "Longitude"}, null, null, null, null, null);
++                        myCursorAdapter.changeCursor(cursor2);
++
++                    }
++                });
++
++                builder.setNegativeButton("No", new DialogInterface.OnClickListener()
++                        {
++                            public void onClick(DialogInterface dialog, int ii) {
++                                dialog.dismiss();
++                            }
++                        }
++                );
++                builder.show();
++                return true;
++            }
++        });
++
++    }
++
++
++
++
++
++    public void goToAddVisit(View view){
++        Intent intent = new Intent(this, addToVisit.class);
++        startActivity(intent);
++
++    }
++
++    public void onRestart(){
++        super.onRestart();
++
++        try{
++            SQLiteOpenHelper databaseHelper = new DatabaseHelper(this);
++            db = databaseHelper.getReadableDatabase();
++            Cursor new_cursor = db.query("toVisit", new String[] {"_id", "Name","Latitude", "Longitude"}, null, null, null, null, null);
++
++            ListView tovisit = (ListView)findViewById(R.id.tovisit);
++            CursorAdapter cursorAdapter = (CursorAdapter)tovisit.getAdapter();
++
++            cursorAdapter.changeCursor(new_cursor);
++
++        }catch(SQLiteException e){
++            Toast toast = Toast.makeText(this, "Baza danych jest niedostępna.", Toast.LENGTH_SHORT);
++            toast.show();
++        }
++
++    }
++
++    public void onDestroy(){
++        super.onDestroy();
++        db.close();
++        cursor.close();
++    }
++
++}
+Index: app/proguard-rules.pro
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/proguard-rules.pro	(revision )
++++ app/proguard-rules.pro	(revision )
+@@ -0,0 +1,25 @@
++# Add project specific ProGuard rules here.
++# By default, the flags in this file are appended to flags specified
++# in C:\Users\Ola\AppData\Local\Android\Sdk/tools/proguard/proguard-android.txt
++# You can edit the include path and order by changing the proguardFiles
++# directive in build.gradle.
++#
++# For more details, see
++#   http://developer.android.com/guide/developing/tools/proguard.html
++
++# Add any project specific keep options here:
++
++# If your project uses WebView with JS, uncomment the following
++# and specify the fully qualified class name to the JavaScript interface
++# class:
++#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
++#   public *;
++#}
++
++# Uncomment this to preserve the line number information for
++# debugging stack traces.
++#-keepattributes SourceFile,LineNumberTable
++
++# If you keep the line number information, uncomment this to
++# hide the original source file name.
++#-renamesourcefileattribute SourceFile
+Index: app/src/main/res/layout/activity_main.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/layout/activity_main.xml	(revision )
++++ app/src/main/res/layout/activity_main.xml	(revision )
+@@ -0,0 +1,72 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++
++    xmlns:tools="http://schemas.android.com/tools"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:background="@android:color/background_light">
++
++    <RelativeLayout
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:layout_weight="1">
++
++        <fragment
++            android:id="@+id/map"
++            android:name="com.google.android.gms.maps.SupportMapFragment"
++            android:layout_width="match_parent"
++            android:layout_height="match_parent"
++            tools:context="com.example.ola.journeyapp.MainActivity" />
++
++        <ImageButton
++            android:id="@+id/my_location"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:src="@android:drawable/ic_menu_mylocation"
++            android:layout_alignParentTop="true"
++            android:layout_alignParentRight="true"
++            android:onClick="take_my_location"/>
++
++    </RelativeLayout>
++
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:layout_weight="10"
++        android:background="@color/common_google_signin_btn_text_light_focused"
++        android:orientation="horizontal">
++
++        <ImageButton
++            android:id="@+id/gallery"
++            android:layout_width="wrap_content"
++            android:layout_height="match_parent"
++            android:layout_weight="1"
++            android:background="@color/common_google_signin_btn_text_light_focused"
++            android:src="@android:drawable/ic_menu_gallery"
++            android:onClick="goToVisitedList"/>
++
++        <ImageButton
++            android:id="@+id/aparat"
++            android:layout_width="wrap_content"
++            android:layout_height="match_parent"
++            android:layout_weight="1"
++            android:background="@color/common_google_signin_btn_text_light_focused"
++            android:onClick="goToCamera"
++            android:src="@android:drawable/ic_menu_save" />
++
++        <ImageButton
++            android:id="@+id/goToList"
++            android:layout_width="wrap_content"
++            android:layout_height="match_parent"
++            android:layout_weight="1"
++            android:background="@color/common_google_signin_btn_text_light_focused"
++            android:onClick="goToVisit"
++            android:src="@android:drawable/ic_menu_myplaces" />
++
++
++    </LinearLayout>
++
++</LinearLayout>
+Index: app/src/main/java/com/example/ola/journeyapp/visitedCursorAdapter.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/visitedCursorAdapter.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/visitedCursorAdapter.java	(revision )
+@@ -0,0 +1,42 @@
++package com.example.ola.journeyapp;
++
++import android.content.Context;
++import android.database.Cursor;
++import android.graphics.Bitmap;
++import android.graphics.BitmapFactory;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.CursorAdapter;
++import android.widget.ImageView;
++import android.widget.TextView;
++
++
++public class visitedCursorAdapter extends CursorAdapter {
++
++    public visitedCursorAdapter(Context context, Cursor cursor, int flags) {
++        super(context, cursor, flags);
++    }
++
++    public void bindView(View view, Context context, Cursor cursor) {
++        TextView name = (TextView) view.findViewById(R.id.place_name_visited);
++        ImageView photo = (ImageView)view.findViewById(R.id.place_photo_visited);
++
++        String title = cursor.getString(cursor.getColumnIndex("Name"));
++
++        name.setText(title);
++
++        byte[] photo_from_base = cursor.getBlob(cursor.getColumnIndex("Photo"));
++
++        if(photo_from_base != null){
++            Bitmap bitmap = BitmapFactory.decodeByteArray(photo_from_base, 0, photo_from_base.length);
++            photo.setImageBitmap(bitmap);
++        }
++
++
++    }
++
++    public View newView(Context context, Cursor cursor, ViewGroup parent) {
++        return LayoutInflater.from(context).inflate(R.layout.visited_row, parent, false);
++    }
++}
+Index: app/src/main/res/layout/add_to_visit_2.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/layout/add_to_visit_2.xml	(revision )
++++ app/src/main/res/layout/add_to_visit_2.xml	(revision )
+@@ -0,0 +1,71 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:padding="10dp">
++
++    <TextView
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="Place name"
++        android:textSize="24sp" />
++
++    <EditText
++        android:id="@+id/add_name"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:ems="10"
++        android:inputType="textPersonName" />
++
++    <Button
++        android:id="@+id/find"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="Find" />
++
++    <fragment xmlns:android="http://schemas.android.com/apk/res/android"
++        xmlns:tools="http://schemas.android.com/tools"
++        android:id="@+id/add_map"
++        android:name="com.google.android.gms.maps.SupportMapFragment"
++        android:layout_width="match_parent"
++        android:layout_height="100dp"
++        android:layout_weight="1"
++        tools:context="com.example.ola.journeyapp.MainActivity" />
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="15dp"
++        android:layout_weight="0.22"
++        android:orientation="horizontal">
++
++        <Button
++            android:id="@+id/cancel"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="Cancel" />
++
++        <Button
++            android:id="@+id/reset"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="Reset" />
++
++        <Button
++            android:id="@+id/save"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="Save" />
++
++    </LinearLayout>
++
++    <ListView
++        android:id="@+id/places_list"
++        android:layout_width="match_parent"
++        android:layout_height="100dp" />
++
++</LinearLayout>
+Index: app/src/main/res/values/colors.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/values/colors.xml	(revision )
++++ app/src/main/res/values/colors.xml	(revision )
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <color name="colorPrimary">#3F51B5</color>
++    <color name="colorPrimaryDark">#303F9F</color>
++    <color name="colorAccent">#FF4081</color>
++</resources>
+Index: app/src/main/java/com/example/ola/journeyapp/myCursorAdapter.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/myCursorAdapter.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/myCursorAdapter.java	(revision )
+@@ -0,0 +1,38 @@
++package com.example.ola.journeyapp;
++
++
++import android.content.Context;
++import android.database.Cursor;
++import android.renderscript.Double2;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.CursorAdapter;
++import android.widget.TextView;
++
++public class myCursorAdapter extends CursorAdapter{
++    private LayoutInflater cursorInflater;
++
++    public myCursorAdapter(Context context, Cursor cursor, int flags) {
++        super(context, cursor, flags);
++    }
++
++    public void bindView(View view, Context context, Cursor cursor) {
++        TextView name = (TextView) view.findViewById(R.id.name);
++        TextView longitude = (TextView) view.findViewById(R.id.longi);
++        TextView latitude = (TextView) view.findViewById(R.id.lati);
++
++        String title = cursor.getString( cursor.getColumnIndex("Name"));
++        double lati = cursor.getDouble(cursor.getColumnIndex("Latitude"));
++        double longi = cursor.getDouble(cursor.getColumnIndex("Longitude"));
++
++        name.setText(title);
++        longitude.setText(Double.toString(longi));
++        latitude.setText(Double.toString(lati));
++    }
++
++    public View newView(Context context, Cursor cursor, ViewGroup parent) {
++        return LayoutInflater.from(context).inflate(R.layout.row, parent, false);
++    }
++
++}
+Index: app/src/main/java/com/example/ola/journeyapp/placesArrayAdapter.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/placesArrayAdapter.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/placesArrayAdapter.java	(revision )
+@@ -0,0 +1,47 @@
++package com.example.ola.journeyapp;
++
++import android.content.Context;
++import android.location.Address;
++import android.support.annotation.LayoutRes;
++import android.support.annotation.NonNull;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.ArrayAdapter;
++import android.widget.TextView;
++
++import java.util.ArrayList;
++
++public class placesArrayAdapter extends ArrayAdapter<Address>{
++
++    private ArrayList<Address> places_list;
++
++    public placesArrayAdapter(Context context, ArrayList<Address> places) {
++        super(context, 0, places);
++        places_list = places;
++    }
++
++    public View getView(int position, View convertView, ViewGroup parent){
++
++        Address addr = getItem(position);
++
++        if (convertView == null) {
++            convertView = LayoutInflater.from(getContext()).inflate(R.layout.row, parent, false);
++        }
++
++        TextView place_name = (TextView) convertView.findViewById(R.id.name);
++        TextView place_lati = (TextView) convertView.findViewById(R.id.lati);
++        TextView place_longi = (TextView) convertView.findViewById(R.id.longi);
++
++        place_name.setText(addr.getAddressLine(0));
++        place_lati.setText(String.valueOf(addr.getLatitude()));
++        place_longi.setText(String.valueOf(addr.getLongitude()));
++
++        return convertView;
++    }
++
++    @Override
++    public Address getItem(int pos){
++        return places_list.get(pos);
++    }
++}
+Index: app/src/main/java/com/example/ola/journeyapp/PrepareActivity.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/PrepareActivity.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/PrepareActivity.java	(revision )
+@@ -0,0 +1,60 @@
++package com.example.ola.journeyapp;
++
++import android.*;
++import android.app.Activity;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.os.Bundle;
++import android.support.v4.app.ActivityCompat;
++import android.util.Log;
++
++
++import static android.Manifest.permission.ACCESS_FINE_LOCATION;
++import static android.Manifest.permission.CAMERA;
++import static android.Manifest.permission.INTERNET;
++import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
++
++
++public class PrepareActivity extends Activity {
++
++    private static final int acces_all = 1;
++
++
++
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        String[] perms = new String[]{ACCESS_FINE_LOCATION, INTERNET, WRITE_EXTERNAL_STORAGE, CAMERA};
++
++
++        ActivityCompat.requestPermissions(PrepareActivity.this, perms, acces_all);
++
++    }
++
++    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
++
++        switch (requestCode){
++            case acces_all:
++                if (hasAllPermissionsGranted(grantResults)) {
++                    Intent i = new Intent(this, MainActivity1.class);
++                    i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
++                    startActivity(i);
++                    ActivityCompat.finishAffinity(PrepareActivity.this);
++                    break;
++                }
++
++            default:
++                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
++                break;
++
++        }
++    }
++
++    public boolean hasAllPermissionsGranted(int[] grantResults) {
++        for (int grantResult : grantResults) {
++            if (grantResult == PackageManager.PERMISSION_DENIED) {
++                return false;
++            }
++        }
++        return true;
++    }
++}
+Index: app/src/main/res/values/strings.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/values/strings.xml	(revision )
++++ app/src/main/res/values/strings.xml	(revision )
+@@ -0,0 +1,4 @@
++<resources>
++    <string name="app_name">JourneyApp</string>
++    <string name="title_activity_main">Map</string>
++</resources>
+Index: app/src/main/java/com/example/ola/journeyapp/DatabaseHelper.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/DatabaseHelper.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/DatabaseHelper.java	(revision )
+@@ -0,0 +1,63 @@
++package com.example.ola.journeyapp;
++
++
++import android.content.ContentValues;
++import android.database.sqlite.SQLiteDatabase;
++import android.database.sqlite.SQLiteOpenHelper;
++import android.content.Context;
++
++
++public class DatabaseHelper  extends SQLiteOpenHelper{
++
++    private static final String DB_NAME = "locations";
++    private static final int DB_VERSION = 1;
++
++    DatabaseHelper(Context context){
++        super(context, DB_NAME, null, DB_VERSION);
++    }
++
++    @Override
++    public void onCreate(SQLiteDatabase db) {
++        db.execSQL("Create table toVisit (_id Integer Primary Key Autoincrement Unique,"+
++                    "Name text," +
++                    "Latitude double," +
++                    "Longitude double);");
++
++        db.execSQL("Create table visited (_id Integer Primary Key Autoincrement,"+
++                "Name text," +
++                "Latitude double," +
++                "Longitude double," +
++                "Note text," +
++                "Photo BLOB," +
++                "Date DATETIME);");
++
++    }
++
++    @Override
++    public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
++    }
++
++    public static void insertToVisit(SQLiteDatabase db, String name, double lati, double longi){
++        ContentValues toVisit = new ContentValues();
++        toVisit.put("Name", name);
++        toVisit.put("Latitude", lati);
++        toVisit.put("Longitude", longi);
++        db.insert("toVisit", null, toVisit);
++    }
++
++    public static void insertVisited(SQLiteDatabase db, String name, double lati, double longi, String note, int id, int p_id){
++        ContentValues visited = new ContentValues();
++        visited.put("Name", name);
++        visited.put("Latitude", lati);
++        visited.put("Longitude", longi);
++        visited.put("Note", note);
++        visited.put("PhotoId", p_id);
++        db.insert("visited", null, visited);
++    }
++
++    public static void deleteToVisit(SQLiteDatabase db, int id){
++        db.delete("toVisit", "_id = ?", new String[] {Integer.toString(id)});
++    }
++
++
++}
+Index: gradle.properties
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>windows-1250
+===================================================================
+--- gradle.properties	(revision )
++++ gradle.properties	(revision )
+@@ -0,0 +1,17 @@
++# Project-wide Gradle settings.
++
++# IDE (e.g. Android Studio) users:
++# Gradle settings configured through the IDE *will override*
++# any settings specified in this file.
++
++# For more details on how to configure your build environment visit
++# http://www.gradle.org/docs/current/userguide/build_environment.html
++
++# Specifies the JVM arguments used for the daemon process.
++# The setting is particularly useful for tweaking memory settings.
++org.gradle.jvmargs=-Xmx1536m
++
++# When configured, Gradle will run in incubating parallel mode.
++# This option should only be used with decoupled projects. More details, visit
++# http://www.gradle.org/docs/current/userguide/multi_project_builds.html#sec:decoupled_projects
++# org.gradle.parallel=true
+Index: app/src/main/java/com/example/ola/journeyapp/MainActivity.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/MainActivity.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/MainActivity.java	(revision )
+@@ -0,0 +1,431 @@
++package com.example.ola.journeyapp;
++
++import android.Manifest;
++import android.app.AlertDialog;
++import android.app.Notification;
++import android.app.NotificationManager;
++import android.app.PendingIntent;
++import android.app.TaskStackBuilder;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.database.Cursor;
++import android.database.sqlite.SQLiteDatabase;
++import android.database.sqlite.SQLiteException;
++import android.database.sqlite.SQLiteOpenHelper;
++import android.graphics.Bitmap;
++import android.location.Address;
++import android.location.Geocoder;
++import android.location.Location;
++import com.google.android.gms.location.LocationListener;
++import android.location.LocationManager;
++import android.net.ConnectivityManager;
++import android.net.NetworkInfo;
++import android.provider.MediaStore;
++import android.provider.Settings;
++import android.support.annotation.NonNull;
++import android.support.annotation.Nullable;
++import android.support.v4.app.ActivityCompat;
++import android.support.v4.app.FragmentActivity;
++import android.os.Bundle;
++import android.support.v4.app.NotificationCompat;
++import android.util.Log;
++import android.view.View;
++import android.widget.ImageView;
++import android.widget.Toast;
++
++import com.google.android.gms.common.ConnectionResult;
++import com.google.android.gms.common.api.GoogleApiClient;
++import com.google.android.gms.common.api.PendingResult;
++import com.google.android.gms.location.LocationRequest;
++import com.google.android.gms.location.LocationSettingsRequest;
++import com.google.android.gms.location.LocationSettingsResult;
++import com.google.android.gms.maps.CameraUpdateFactory;
++import com.google.android.gms.maps.GoogleMap;
++import com.google.android.gms.maps.OnMapReadyCallback;
++import com.google.android.gms.maps.SupportMapFragment;
++import com.google.android.gms.maps.model.BitmapDescriptorFactory;
++import com.google.android.gms.maps.model.LatLng;
++import com.google.android.gms.maps.model.Marker;
++import com.google.android.gms.maps.model.MarkerOptions;
++import com.google.android.gms.location.LocationServices;
++
++import java.io.IOException;
++import java.util.HashMap;
++import java.util.List;
++
++public class MainActivity extends FragmentActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks,
++        GoogleApiClient.OnConnectionFailedListener,
++        LocationListener {
++
++    private GoogleMap mMap;
++    private String place_name;
++    private SQLiteDatabase db;
++    private String[] to_visit_list;
++
++
++    private GoogleApiClient mGoogleApiClient;
++    private LocationRequest mLocationRequest;
++    private LocationManager locationManager;
++    private LocationSettingsRequest mLocationSettingsRequest;
++    private Location location;
++    private double myLati;
++    private double myLongi;
++    private Marker myMarker;
++
++    private HashMap<Marker, MarkerInfo> eventMarkerMap;
++
++    private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 10; // 100 meters
++    private static final long MIN_TIME_BW_UPDATES = 1000 * 10; // 15 seconds
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.activity_main);
++        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
++                .findFragmentById(R.id.map);
++        mapFragment.getMapAsync(this);
++
++        eventMarkerMap = new HashMap<Marker, MarkerInfo>();
++
++
++        locationManager = (LocationManager)getSystemService(LOCATION_SERVICE);
++
++        mGoogleApiClient = new GoogleApiClient.Builder(this)
++                .addConnectionCallbacks(this)
++                .addOnConnectionFailedListener(this)
++                .addApi(LocationServices.API)
++                .build();
++
++        mLocationRequest = new LocationRequest()
++                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
++                .setInterval(MIN_TIME_BW_UPDATES)        // 15 seconds, in milliseconds
++                .setFastestInterval(1 * 1000)
++                .setExpirationDuration(MIN_DISTANCE_CHANGE_FOR_UPDATES); // 1 second, in milliseconds
++
++        LocationSettingsRequest.Builder builder = new LocationSettingsRequest.Builder().addLocationRequest(mLocationRequest);
++
++
++
++        PendingResult<LocationSettingsResult> result = LocationServices.SettingsApi.checkLocationSettings(mGoogleApiClient, builder.build());
++    }
++
++
++    @Override
++    public void onMapReady(GoogleMap googleMap) {
++        mMap = googleMap;
++
++        mMap.setOnInfoWindowClickListener(new GoogleMap.OnInfoWindowClickListener() {
++
++
++
++            @Override
++
++            public void onInfoWindowClick(Marker marker) {
++
++                MarkerInfo eventInfo = eventMarkerMap.get(marker);
++
++                Intent i = new Intent(MainActivity.this, visitedDetail.class);
++                i.putExtra("ID", (int)eventInfo.getId());
++
++                Log.e("!!!!!!!!!!!!", String.valueOf(eventInfo.getId()));
++                startActivity(i);
++
++        }});
++
++       // mMap.setMyLocationEnabled(true);
++
++//        MarkerOptions a = new MarkerOptions()
++//                .position(new LatLng(0, 0))
++//                .title("Ty")
++//                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE));
++//
++//        myMarker = mMap.addMarker(a);
++
++        setToVisit();
++        setVisited();
++    }
++
++    public void goToVisit(View view) {
++        Intent intent = new Intent(this, toVisitList.class);
++        startActivity(intent);
++
++    }
++
++    public void goToVisitedList(View v) {
++        Intent i = new Intent(this, visitedLIst.class);
++        startActivity(i);
++    }
++
++    public void goToCamera(View v) {
++        Intent intent = new Intent(this, addVisited.class);
++
++        Geocoder geocoder = new Geocoder(this);
++        place_name = "Unknown localization";
++
++
++        try {
++            List<Address> addresses = geocoder.getFromLocation(myLati, myLongi, 1);
++            if (addresses.size() > 0) {
++                place_name = addresses.get(0).getLocality() + ", " + addresses.get(0).getThoroughfare();
++            }
++
++        } catch (IOException e) {
++
++        }
++
++        intent.putExtra("name", place_name);
++        intent.putExtra("lati", myLati);
++        intent.putExtra("longi", myLongi);
++        startActivity(intent);
++    }
++
++    public void setToVisit() {
++
++        getArrayFromDataBase();
++
++        for (int i = 0; i < to_visit_list.length; i++) {
++            String[] row = to_visit_list[i].split(";");
++            String name = row[0];
++            double lati = Double.valueOf(row[1]);
++            double longi = Double.valueOf(row[2]);
++
++            LatLng pos = new LatLng(lati, longi);
++            mMap.addMarker(new MarkerOptions()
++                    .position(pos)
++                    .title("To visit: " + name)
++                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
++                    .alpha(0.7f));
++        }
++    }
++
++    public void setVisited() {
++
++        try {
++
++            SQLiteOpenHelper databaseHelper = new DatabaseHelper(this);
++            db = databaseHelper.getReadableDatabase();
++            Cursor cursor = db.query("visited", new String[]{"_id", "Name", "Latitude", "Longitude"}, null, null, null, null, null);
++
++            double longi;
++            double lati;
++            String name;
++
++            while (cursor.moveToNext()) {
++                longi = cursor.getDouble(3);
++                lati = cursor.getDouble(2);
++                name = cursor.getString(1);
++                LatLng pos = new LatLng(lati, longi);
++
++                Marker a = mMap.addMarker(new MarkerOptions()
++                        .position(pos)
++                        .title("Visited: " + name)
++                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
++
++
++                int id = cursor.getInt(0);
++                Log.e("!!!!!!!!!!!!", String.valueOf(id));
++                eventMarkerMap.put(a, new MarkerInfo(id));
++            }
++
++        } catch (SQLiteException e) {
++            Toast toast = Toast.makeText(this, "Baza danych jest niedostępna.", Toast.LENGTH_SHORT);
++            toast.show();
++        }
++    }
++
++    public void getArrayFromDataBase() {
++        try {
++
++            SQLiteOpenHelper databaseHelper = new DatabaseHelper(this);
++            db = databaseHelper.getReadableDatabase();
++            Cursor cursor = db.query("toVisit", new String[]{"_id", "Name", "Latitude", "Longitude"}, null, null, null, null, null);
++            to_visit_list = new String[cursor.getCount()];
++
++            double longi;
++            double lati;
++            String name;
++
++            int i = 0;
++            while (cursor.moveToNext()) {
++                longi = cursor.getDouble(3);
++                lati = cursor.getDouble(2);
++                name = cursor.getString(1);
++                to_visit_list[i] = name + ';' + Double.toString(lati) + ';' + Double.toString(longi);
++                i++;
++            }
++
++        } catch (SQLiteException e) {
++            Toast toast = Toast.makeText(this, "Baza danych jest niedostępna.", Toast.LENGTH_SHORT);
++            toast.show();
++        }
++
++    }
++
++    public void onRestart() {
++        super.onRestart();
++        setToVisit();
++        setVisited();
++    }
++
++
++    public void onResume() {
++        super.onResume();
++
++
++        if (mMap == null) {
++            SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
++            mapFragment.getMapAsync(this);
++        }
++        if (mMap != null) {
++            mMap.clear();
++
++//            MarkerOptions a = new MarkerOptions()
++//                    .position(new LatLng(0, 0))
++//                    .title("Ty")
++//                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE));
++//
++//            myMarker = mMap.addMarker(a);
++
++            setToVisit();
++            setVisited();
++        }
++
++        mGoogleApiClient.connect();
++    }
++
++    public void onPause() {
++        super.onPause();
++        if (mGoogleApiClient.isConnected()) {
++            mGoogleApiClient.disconnect();
++        }
++    }
++
++    protected void onStart() {
++        mGoogleApiClient.connect();
++        super.onStart();
++    }
++
++    protected void onStop() {
++        mGoogleApiClient.disconnect();
++        super.onStop();
++    }
++
++
++    private void handleNewLocation(Location location) {
++
++        Log.e("!!!!!!!!!!!!!!!!!!!", "handle");
++
++        myLati = location.getLatitude();
++        myLongi = location.getLongitude();
++
++        LatLng position = new LatLng(myLati, myLongi);
++
++      //  myMarker.setPosition(position);
++
++//        MarkerOptions a = new MarkerOptions()
++//                .position(new LatLng(myLati, myLongi))
++//                .title("Ty")
++//                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE));
++//
++//        myMarker = mMap.addMarker(a);
++
++        mMap.moveCamera(CameraUpdateFactory.newLatLng(position));
++        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(position, 18));
++
++    }
++
++
++    @Override
++    public void onLocationChanged(Location location) {
++        Log.e("!!!!!!", "onCHangeLocation");
++        handleNewLocation(location);
++        calculateDistance();
++    }
++
++    @Override
++    public void onConnected(@Nullable Bundle bundle) {
++
++        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){
++
++            ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 0);
++        }
++
++        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
++
++            ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 0);
++        }
++
++       location = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
++       //location = LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
++
++        if (location != null) {
++            Log.e("!!!!!!!!!!!!!", "onConnected");
++            handleNewLocation(location);
++        }
++    }
++
++    @Override
++    public void onConnectionSuspended(int i) {
++
++    }
++
++    @Override
++    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
++
++    }
++
++    public void calculateDistance() {
++
++        Location myLocation = new Location("");
++        myLocation.setLatitude(myLati);
++        myLocation.setLongitude(myLongi);
++
++        for(int i = 0; i < to_visit_list.length; i++) {
++            String[] row = to_visit_list[i].split(";");
++            String name = row[0];
++            double lati = Double.valueOf(row[1]);
++            double longi = Double.valueOf(row[2]);
++
++            Location loc = new Location("");
++            loc.setLatitude(lati);
++            loc.setLongitude(longi);
++
++            float disnatnceInMeters = myLocation.distanceTo(loc);
++
++            if(disnatnceInMeters < 1000){
++                sendNotification(name, disnatnceInMeters);
++            }
++
++
++
++        }
++    }
++
++    private void sendNotification(String Name, float distance){
++
++        NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(this);
++        mBuilder.setAutoCancel(true);
++        mBuilder.setSmallIcon(R.drawable.aparat);
++        mBuilder.setContentTitle("You are close to:");
++        mBuilder.setContentText(Name +": "+ distance);
++
++
++        Intent resultIntent = new Intent(this, MainActivity.class);
++        TaskStackBuilder stackBuilder = TaskStackBuilder.create(this);
++        stackBuilder.addParentStack(MainActivity.class);
++
++        stackBuilder.addNextIntent(resultIntent);
++        PendingIntent resultPendingIntent = stackBuilder.getPendingIntent(0,PendingIntent.FLAG_UPDATE_CURRENT);
++        mBuilder.setContentIntent(resultPendingIntent);
++
++        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
++
++
++        mBuilder.build().flags |= Notification.FLAG_AUTO_CANCEL;
++
++        mNotificationManager.notify(12345, mBuilder.build());
++
++    }
++}
+Index: app/src/main/res/layout/photo_detail.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/layout/photo_detail.xml	(revision )
++++ app/src/main/res/layout/photo_detail.xml	(revision )
+@@ -0,0 +1,12 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:orientation="vertical" android:layout_width="match_parent"
++    android:layout_height="match_parent">
++
++    <ImageView
++        android:id="@+id/full_photo"
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:src="@drawable/none_photo" />
++
++</LinearLayout>
+\ No newline at end of file
+Index: app/src/main/res/layout/visited_row.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/layout/visited_row.xml	(revision )
++++ app/src/main/res/layout/visited_row.xml	(revision )
+@@ -0,0 +1,25 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    xmlns:tools="http://schemas.android.com/tools"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:orientation="horizontal"
++    android:padding="10dp">
++
++    <ImageView
++        android:id="@+id/place_photo_visited"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginRight="10dp"
++        android:layout_weight="1"
++        app:srcCompat="@color/common_google_signin_btn_text_dark_default" />
++
++    <TextView
++        android:id="@+id/place_name_visited"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_weight="1"
++        android:text="TextView"
++        android:textSize="24sp" />
++</LinearLayout>
+\ No newline at end of file
+Index: app/src/main/java/com/example/ola/journeyapp/MarkerInfo.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/MarkerInfo.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/MarkerInfo.java	(revision )
+@@ -0,0 +1,18 @@
++package com.example.ola.journeyapp;
++
++/**
++ * Created by Ola on 2017-06-01.
++ */
++
++public class MarkerInfo {
++    private long id;
++
++    public MarkerInfo(long _id){
++        this.id = _id;
++    }
++
++    public long getId(){
++        return id;
++    }
++
++}
+Index: app/src/main/res/layout/visited_detail.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/layout/visited_detail.xml	(revision )
++++ app/src/main/res/layout/visited_detail.xml	(revision )
+@@ -0,0 +1,86 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:layout_margin="10dp"
++    android:orientation="vertical">
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="horizontal">
++
++        <LinearLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:orientation="vertical"
++            android:padding="5dp">
++
++            <TextView
++                android:id="@+id/detail_name"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:text="Name"
++                android:textSize="24sp" />
++
++            <TextView
++                android:id="@+id/detail_date"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginBottom="5dp"
++                android:layout_marginTop="5dp"
++                android:text="Date"
++                android:textSize="20sp" />
++
++            <LinearLayout
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="10dp"
++                android:orientation="horizontal">
++
++                <TextView
++                    android:id="@+id/detail_lati"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:layout_weight="1"
++                    android:text="Lati"
++                    android:textSize="20sp" />
++
++                <TextView
++                    android:id="@+id/detail_longi"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:layout_weight="1"
++                    android:text="Longi"
++                    android:textSize="20sp" />
++            </LinearLayout>
++        </LinearLayout>
++
++    </LinearLayout>
++
++    <ImageView
++        android:id="@+id/detail_photo"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginBottom="5dp"
++        android:layout_marginTop="5dp"
++        android:layout_weight="1"
++        android:src="@drawable/none_photo"
++        android:onClick="showPhotoDetail"/>
++
++    <TextView
++        android:id="@+id/detail_note"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginBottom="5dp"
++        android:layout_marginTop="5dp"
++        android:gravity="top|left"
++        android:lines="10"
++        android:maxLines="15"
++        android:scrollbars="vertical"
++        android:text="TextView"
++        android:textSize="20sp" />
++
++</LinearLayout>
+\ No newline at end of file
+Index: app/src/main/java/com/example/ola/journeyapp/addToVisit.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/addToVisit.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/addToVisit.java	(revision )
+@@ -0,0 +1,289 @@
++package com.example.ola.journeyapp;
++
++import android.app.AlertDialog;
++import android.content.ContentValues;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.database.sqlite.SQLiteDatabase;
++import android.database.sqlite.SQLiteOpenHelper;
++import android.location.Address;
++import android.location.Geocoder;
++import android.net.ConnectivityManager;
++import android.net.NetworkInfo;
++import android.os.Bundle;
++import android.provider.Settings;
++import android.support.v4.app.ActivityCompat;
++import android.support.v4.app.FragmentActivity;
++import android.view.View;
++import android.widget.AdapterView;
++import android.widget.Button;
++import android.widget.EditText;
++import android.widget.ListView;
++import android.widget.Toast;
++
++import com.google.android.gms.maps.CameraUpdateFactory;
++import com.google.android.gms.maps.GoogleMap;
++import com.google.android.gms.maps.OnMapReadyCallback;
++import com.google.android.gms.maps.SupportMapFragment;
++import com.google.android.gms.maps.model.LatLng;
++import com.google.android.gms.maps.model.Marker;
++import com.google.android.gms.maps.model.MarkerOptions;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++import static android.Manifest.permission.INTERNET;
++import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
++
++
++public class addToVisit extends FragmentActivity implements OnMapReadyCallback {
++
++    private EditText nameText;
++    private SQLiteDatabase db;
++    private SQLiteOpenHelper databaseHelper;
++    private GoogleMap mMap;
++    private List<Address> addresses;
++    private Geocoder geocoder;
++    private double latitude;
++    private double longitude;
++    private Marker marker;
++
++    private ListView places;
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.add_to_visit_2);
++
++        nameText = (EditText) findViewById(R.id.add_name);
++
++        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
++                .findFragmentById(R.id.add_map);
++        mapFragment.getMapAsync(this);
++
++
++        databaseHelper = new DatabaseHelper(this);
++        places = (ListView) findViewById(R.id.places_list);
++        places.setAdapter(new placesArrayAdapter(this, new ArrayList<Address>()));
++
++
++        places.setOnItemClickListener(new AdapterView.OnItemClickListener() {
++            @Override
++            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
++                Address addrr = (Address)parent.getAdapter().getItem(position);
++                latitude = addrr.getLatitude();
++                longitude = addrr.getLongitude();
++
++                LatLng pos = new LatLng(latitude, longitude);
++
++                mMap.clear();
++                marker = mMap.addMarker(new MarkerOptions().position(pos).title(""));
++                mMap.moveCamera(CameraUpdateFactory.newLatLng(pos));
++                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(pos, 12));
++
++            }
++        });
++
++        geocoder = new Geocoder(this);
++
++        if (!isOnline()) {
++            showNetworkAlert();
++        }
++
++        final Button cancelButton = (Button) findViewById(R.id.cancel);
++        cancelButton.setOnClickListener(new View.OnClickListener() {
++            public void onClick(View v) {
++                finish();
++            }
++        });
++
++        final Button resetButton = (Button) findViewById(R.id.reset);
++        resetButton.setOnClickListener(new View.OnClickListener() {
++            public void onClick(View v) {
++
++
++                nameText.setText("");
++
++                mMap.clear();
++                LatLng sydney = new LatLng(0, 0);
++                marker = mMap.addMarker(new MarkerOptions().position(sydney).title(""));
++                mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney));
++                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(sydney, 0));
++
++                places.setAdapter(null);
++            }
++        });
++
++        final Button findButton = (Button) findViewById(R.id.find);
++        findButton.setOnClickListener(new View.OnClickListener() {
++            public void onClick(View v) {
++
++                String city = nameText.getText().toString();
++                places.setAdapter(null);
++
++                try {
++                    addresses = geocoder.getFromLocationName(city, 10);
++                    if (addresses.size() == 1) {
++                        latitude = addresses.get(0).getLatitude();
++                        longitude = addresses.get(0).getLongitude();
++
++                        LatLng position = new LatLng(latitude, longitude);
++
++                        if (marker != null) {
++                            marker.setPosition(position);
++                        } else {
++                            mMap.clear();
++                            marker = mMap.addMarker(new MarkerOptions().position(position).title(""));
++                            mMap.moveCamera(CameraUpdateFactory.newLatLng(position));
++                        }
++
++                        mMap.moveCamera(CameraUpdateFactory.newLatLng(position));
++                        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(position, 12));
++
++                    }else if(addresses.size() > 1){
++                        ArrayList<Address> array = new ArrayList<Address>(addresses.size());
++                        array.addAll(addresses);
++                        placesArrayAdapter adapter = new placesArrayAdapter(addToVisit.this, array);
++
++                        places.setAdapter(adapter);
++
++                    }
++                    else{
++                        Toast.makeText(addToVisit.this, "I can't find location :(", Toast.LENGTH_LONG).show();
++                    }
++
++                } catch (IOException e) {
++                    // handle the exception
++                }
++
++            }
++        });
++
++        final Button submitButton = (Button) findViewById(R.id.save);
++        submitButton.setOnClickListener(new View.OnClickListener() {
++            public void onClick(View v) {
++
++                String name = nameText.getText().toString();
++
++                if (!name.equals("")) {
++                    db = databaseHelper.getWritableDatabase();
++
++                    ContentValues new_to_visit = new ContentValues();
++
++                    new_to_visit.put("Name", name);
++                    new_to_visit.put("Latitude", latitude);
++                    new_to_visit.put("Longitude", longitude);
++
++                    db.insert("toVisit", null, new_to_visit);
++
++                    finish();
++                    db.close();
++
++                } else {
++
++                    Toast toast = Toast.makeText(addToVisit.this, "You must type a place!", Toast.LENGTH_SHORT);
++                    toast.show();
++
++                }
++
++            }
++        });
++    }
++
++    private void askForPermissions() {
++
++        if (ActivityCompat.checkSelfPermission(this, INTERNET)
++                != PackageManager.PERMISSION_GRANTED) {
++            if (ActivityCompat.shouldShowRequestPermissionRationale(addToVisit.this, INTERNET)) {
++                ActivityCompat.requestPermissions(addToVisit.this, new String[]{INTERNET}, 0);
++            } else {
++                ActivityCompat.requestPermissions(addToVisit.this, new String[]{INTERNET}, 0);
++            }
++        }
++
++
++    }
++
++    @Override
++    public void onMapReady(GoogleMap googleMap) {
++        mMap = googleMap;
++        LatLng sydney = new LatLng(latitude, longitude);
++        marker = mMap.addMarker(new MarkerOptions().position(sydney).title(""));
++        mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney));
++
++
++        mMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
++
++            @Override
++            public void onMapClick(LatLng point) {
++
++                mMap.clear();
++                marker = null;
++
++                places.setAdapter(null);
++
++                MarkerOptions marker = new MarkerOptions().position(
++                        new LatLng(point.latitude, point.longitude)).title("");
++
++                latitude = point.latitude;
++                longitude = point.longitude;
++
++                try{
++                    addresses = geocoder.getFromLocation(latitude,longitude,1);
++                    if(addresses.size() > 0){
++                        if(addresses.get(0).getFeatureName() != null){
++                            nameText.setText(addresses.get(0).getCountryName() +", " + addresses.get(0).getFeatureName());
++                        }
++                        else{
++                            nameText.setText(addresses.get(0).getCountryName());
++                        }
++                    }
++                }catch (IOException e){
++
++                }
++
++                mMap.addMarker(marker);
++            }
++        });
++
++    }
++
++    public void onDestroy() {
++        super.onDestroy();
++    }
++
++    public boolean isOnline() {
++        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
++        NetworkInfo netInfo = cm.getActiveNetworkInfo();
++        return netInfo != null && netInfo.isConnectedOrConnecting();
++    }
++
++    public void showNetworkAlert() {
++        AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
++
++        alertDialog.setTitle("Network settings");
++
++        alertDialog.setMessage("Network is not enabled. Do you want to go to settings menu?");
++
++        // On pressing Settings button
++        alertDialog.setPositiveButton("Settings", new DialogInterface.OnClickListener() {
++            public void onClick(DialogInterface dialog, int which) {
++                Intent intent = new Intent(Settings.ACTION_WIFI_SETTINGS);
++                startActivity(intent);
++            }
++        });
++
++        // on pressing cancel button
++        alertDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
++            public void onClick(DialogInterface dialog, int which) {
++                dialog.cancel();
++            }
++        });
++
++        // Showing Alert Message
++        alertDialog.show();
++    }
++}
+Index: app/src/main/java/com/example/ola/journeyapp/addVisited.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/addVisited.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/addVisited.java	(revision )
+@@ -0,0 +1,187 @@
++package com.example.ola.journeyapp;
++
++import android.Manifest;
++import android.app.Activity;
++import android.content.ContentValues;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.database.sqlite.SQLiteDatabase;
++import android.database.sqlite.SQLiteOpenHelper;
++import android.graphics.Bitmap;
++import android.graphics.drawable.BitmapDrawable;
++import android.os.Bundle;
++import android.os.Environment;
++import android.provider.MediaStore;
++import android.support.v4.app.ActivityCompat;
++import android.view.View;
++import android.widget.EditText;
++import android.widget.ImageView;
++import android.widget.Toast;
++
++import java.io.ByteArrayOutputStream;
++import java.io.File;
++import java.io.FileOutputStream;
++import java.text.SimpleDateFormat;
++import java.util.Date;
++import java.util.Locale;
++import java.util.Random;
++
++import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
++
++
++public class addVisited extends Activity {
++
++    private static final int CAMERA_REQUEST = 1888;
++    private Bitmap photo;
++    private ImageView imageView;
++    private EditText place_n;
++    private EditText note;
++    private double lati;
++    private double longi;
++    private String place_name;
++    private String note_to_save;
++    private SQLiteDatabase db;
++    private SQLiteOpenHelper databaseHelper;
++
++
++    public String fname;
++    public String name;
++
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.add_visited);
++
++        imageView = (ImageView)findViewById(R.id.photo);
++        place_n = (EditText)findViewById(R.id.place_name);
++        note = (EditText)findViewById(R.id.note);
++        lati = (double)getIntent().getExtras().get("lati");
++        longi = (double)getIntent().getExtras().get("longi");
++        place_name = (String)getIntent().getExtras().get("name");
++
++        databaseHelper = new DatabaseHelper(this);
++
++        place_n.setText(place_name);
++
++
++    }
++
++    public void takePhoto(View v){
++
++        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
++                != PackageManager.PERMISSION_GRANTED ) {
++            if (ActivityCompat.shouldShowRequestPermissionRationale(addVisited.this, Manifest.permission.CAMERA)) {
++                ActivityCompat.requestPermissions(addVisited.this, new String[]{Manifest.permission.CAMERA}, 0);
++            } else {
++                ActivityCompat.requestPermissions(addVisited.this, new String[]{Manifest.permission.CAMERA}, 0);
++            }
++        }else{
++            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
++            startActivityForResult(intent, CAMERA_REQUEST);
++        }
++
++    }
++
++    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
++        if (requestCode == CAMERA_REQUEST && resultCode == Activity.RESULT_OK) {
++            photo = (Bitmap) data.getExtras().get("data");
++            imageView.setImageBitmap(photo);
++
++
++            if (ActivityCompat.checkSelfPermission(this, WRITE_EXTERNAL_STORAGE)
++                    != PackageManager.PERMISSION_GRANTED ) {
++                if (ActivityCompat.shouldShowRequestPermissionRationale(addVisited.this, WRITE_EXTERNAL_STORAGE)) {
++                    ActivityCompat.requestPermissions(addVisited.this, new String[]{WRITE_EXTERNAL_STORAGE}, 0);
++                } else {
++                    ActivityCompat.requestPermissions(addVisited.this, new String[]{WRITE_EXTERNAL_STORAGE}, 0);
++                }
++            }
++        }
++    }
++
++    public void add_visited(View v){
++        note_to_save = note.getText().toString();
++        place_name = place_n.getText().toString();
++
++        if(!place_name.equals("")){
++            db = databaseHelper.getWritableDatabase();
++
++            ContentValues new_visited = new ContentValues();
++
++            new_visited.put("Name", place_name);
++            new_visited.put("Latitude", lati);
++            new_visited.put("Longitude", longi);
++            new_visited.put("Note", note_to_save);
++            new_visited.put("Date", getDateTime());
++
++            if(photo != null){
++                ByteArrayOutputStream stream = new ByteArrayOutputStream();
++                photo.compress(Bitmap.CompressFormat.PNG, 100, stream);
++                byte[] byteArray = stream.toByteArray();
++
++                new_visited.put("Photo",byteArray);
++            }
++
++
++
++            db.insert("visited", null, new_visited);
++            db.close();
++
++            saveImage(new BitmapDrawable(getResources(), photo));
++
++
++        }else{
++
++            Toast toast = Toast.makeText(addVisited.this, "You must type a place!", Toast.LENGTH_SHORT);
++            toast.show();
++
++        }
++
++
++        finish();
++    }
++
++    public void showPhoto(View v){
++        Intent i = new Intent(this, PhotoDetails.class);
++        i.putExtra("photo", photo);
++        startActivity(i);
++    }
++
++    public void saveImage(BitmapDrawable bitmap){
++
++        String root = Environment.getExternalStorageDirectory().toString();
++
++        File myDir = new File(root + "/saved_images");
++        myDir.mkdirs();
++        Random generator = new Random();
++        int n = 10000;
++        n = generator.nextInt(n);
++        fname = "Image-" + n + ".jpg";
++        name = fname;
++        File file = new File (myDir, fname);
++
++        if (file.exists ()) {
++            file.delete();
++
++        }
++        try {
++            FileOutputStream out = new FileOutputStream(file);
++            bitmap.getBitmap().compress(Bitmap.CompressFormat.JPEG, 100, out);
++            out.flush();
++            out.close();
++
++
++        } catch (Exception e) {
++            e.printStackTrace();
++        }
++    }
++
++    private String getDateTime() {
++        SimpleDateFormat dateFormat = new SimpleDateFormat(
++                "yyyy-MM-dd HH:mm:ss", Locale.getDefault());
++        Date date = new Date();
++        return dateFormat.format(date);
++    }
++
++
++
++}
+Index: settings.gradle
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- settings.gradle	(revision )
++++ settings.gradle	(revision )
+@@ -0,0 +1,1 @@
++include ':app'
+Index: app/src/main/res/layout/to_visit_list.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/layout/to_visit_list.xml	(revision )
++++ app/src/main/res/layout/to_visit_list.xml	(revision )
+@@ -0,0 +1,33 @@
++<?xml version="1.0" encoding="utf-8"?>
++
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:id="@+id/full_to_visit"
++    android:layout_width="fill_parent"
++    android:layout_height="fill_parent"
++    android:background="@color/common_google_signin_btn_text_dark_default"
++    android:layout_weight="1"
++    android:orientation="vertical">
++
++    <ImageButton
++        android:id="@+id/addToVisit"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="10dp"
++        android:layout_weight="1"
++        android:background="@color/common_google_signin_btn_text_dark_default"
++        android:onClick="goToAddVisit"
++        android:src="@android:drawable/ic_input_add" />
++
++    <ListView
++        android:id="@+id/tovisit"
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:layout_margin="20dp"
++        android:layout_weight="10"
++        android:background="@color/common_google_signin_btn_text_dark_default">
++
++    </ListView>
++
++
++</LinearLayout>
+Index: .idea/vcs.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- .idea/vcs.xml	(revision )
++++ .idea/vcs.xml	(revision )
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="VcsDirectoryMappings">
++    <mapping directory="" vcs="Git" />
++  </component>
++</project>
+\ No newline at end of file
+Index: app/build.gradle
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/build.gradle	(revision )
++++ app/build.gradle	(revision )
+@@ -0,0 +1,32 @@
++apply plugin: 'com.android.application'
++
++android {
++    compileSdkVersion 25
++    buildToolsVersion "25.0.2"
++    defaultConfig {
++        applicationId "com.example.ola.journeyapp"
++        minSdkVersion 18
++        targetSdkVersion 25
++        versionCode 1
++        versionName "1.0"
++        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
++    }
++    buildTypes {
++        release {
++            minifyEnabled false
++            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
++        }
++    }
++}
++
++dependencies {
++    compile fileTree(dir: 'libs', include: ['*.jar'])
++    androidTestCompile('com.android.support.test.espresso:espresso-core:2.2.2', {
++        exclude group: 'com.android.support', module: 'support-annotations'
++    })
++    compile 'com.android.support:appcompat-v7:25.2.0'
++    compile 'com.google.android.gms:play-services-maps:10.2.6'
++    compile 'com.google.android.gms:play-services-location:10.2.6'
++    compile 'com.google.android.gms:play-services:10.2.6'
++    testCompile 'junit:junit:4.12'
++}
+Index: app/src/main/AndroidManifest.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/AndroidManifest.xml	(revision )
++++ app/src/main/AndroidManifest.xml	(revision )
+@@ -0,0 +1,78 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="com.example.ola.journeyapp">
++
++
++    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++    <uses-permission android:name="android.permission.LOCATION_SERVICE" />
++    <uses-permission android:name="myapp.permission.MAPS_RECEIVE"/>
++    <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES" />
++    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
++    <uses-permission android:name="android.permission.CAMERA" />
++    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
++    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
++    <uses-permission android:name="android.permission.STORAGE" />
++
++    <application
++        android:allowBackup="true"
++        android:icon="@mipmap/ic_launcher"
++        android:label="@string/app_name"
++        android:roundIcon="@mipmap/ic_launcher_round"
++        android:supportsRtl="true"
++        android:theme="@style/AppTheme">
++
++        <meta-data
++            android:name="com.google.android.geo.API_KEY"
++            android:value="@string/google_maps_key" />
++
++        <activity
++            android:name=".PrepareActivity"
++            android:label="@string/title_activity_main"
++            android:screenOrientation="portrait">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++
++                <category android:name="android.intent.category.LAUNCHER" />
++            </intent-filter>
++        </activity>
++
++        <activity
++            android:screenOrientation="portrait"
++            android:name=".toVisitList">
++        </activity>
++
++        <activity
++            android:screenOrientation="portrait"
++            android:name=".MainActivity1">
++        </activity>
++
++        <activity
++            android:screenOrientation="portrait"
++            android:name=".addToVisit">
++        </activity>
++
++        <activity
++            android:screenOrientation="portrait"
++            android:name=".addVisited">
++        </activity>
++
++        <activity android:name=".PhotoDetails">
++        </activity>
++
++        <activity
++            android:name=".visitedLIst"
++            android:screenOrientation="portrait">
++
++        </activity>
++
++        <activity
++            android:name=".visitedDetail"
++            android:screenOrientation="portrait">
++
++        </activity>
++
++    </application>
++
++</manifest>
+\ No newline at end of file
+Index: app/src/main/res/layout/row.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/layout/row.xml	(revision )
++++ app/src/main/res/layout/row.xml	(revision )
+@@ -0,0 +1,38 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:layout_margin="20dp"
++    android:layout_marginBottom="20dp"
++    android:orientation="vertical">
++
++    <TextView
++        android:id="@+id/name"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:text="TextView"
++        android:textSize="24sp" />
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="10dp"
++        android:orientation="horizontal">
++
++        <TextView
++            android:id="@+id/longi"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="TextView"
++            android:textSize="18sp" />
++
++        <TextView
++            android:id="@+id/lati"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:text="TextView"
++            android:textSize="18sp" />
++    </LinearLayout>
++</LinearLayout>
+\ No newline at end of file
+Index: app/src/main/res/layout/visited_list.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/res/layout/visited_list.xml	(revision )
++++ app/src/main/res/layout/visited_list.xml	(revision )
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:orientation="vertical" android:layout_width="match_parent"
++    android:layout_height="match_parent">
++
++    <ListView
++        android:id="@+id/visited_list"
++        android:layout_width="match_parent"
++        android:layout_height="match_parent" />
++</LinearLayout>
+\ No newline at end of file
+Index: app/src/main/java/com/example/ola/journeyapp/PhotoDetails.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- app/src/main/java/com/example/ola/journeyapp/PhotoDetails.java	(revision )
++++ app/src/main/java/com/example/ola/journeyapp/PhotoDetails.java	(revision )
+@@ -0,0 +1,27 @@
++package com.example.ola.journeyapp;
++
++import android.app.Activity;
++import android.content.Intent;
++import android.graphics.Bitmap;
++import android.os.Bundle;
++import android.widget.EditText;
++import android.widget.ImageView;
++
++
++public class PhotoDetails extends Activity {
++
++    private ImageView full_photo;
++    private Bitmap photo;
++
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.photo_detail);
++
++        full_photo = (ImageView)findViewById(R.id.full_photo);
++        photo = (Bitmap) getIntent().getExtras().get("photo");
++        if(photo != null) {
++            full_photo.setImageBitmap(photo);
++        }
++
++    }
++}

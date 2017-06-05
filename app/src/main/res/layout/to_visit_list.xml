@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/full_to_visit"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:background="@color/common_google_signin_btn_text_dark_default"
+    android:layout_weight="1"
+    android:orientation="vertical">
+
+    <ImageButton
+        android:id="@+id/addToVisit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:layout_weight="1"
+        android:background="@color/common_google_signin_btn_text_dark_default"
+        android:onClick="goToAddVisit"
+        android:src="@android:drawable/ic_input_add" />
+
+    <ListView
+        android:id="@+id/tovisit"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_margin="20dp"
+        android:layout_weight="10"
+        android:background="@color/common_google_signin_btn_text_dark_default">
+
+    </ListView>
+
+
+</LinearLayout>
